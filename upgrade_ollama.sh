@@ -3,7 +3,7 @@
 set -e
 set -o pipefail
 
-echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.2.0"
+echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.3.0"
 
 # 1. 查找 Ollama 安装路径
 echo "🔍 查找 Ollama 安装路径..."
@@ -105,67 +105,90 @@ else
     URL="$GITHUB_URL"
 fi
 
-# 如果版本一致，退出升级
+# ========== Ollama 升级 ==========
 if [ "$CLIENT_VER" = "${LATEST_TAG#v}" ]; then
-    echo "✅ 当前已是最新版本（v$CLIENT_VER），无需升级。"
-    exit 0
-fi
+    echo "✅ Ollama 当前已是最新版本（v$CLIENT_VER），无需升级。"
+    OLLAMA_UPGRADED=false
+else
+    echo ""
+    echo "📋 Ollama 版本信息："
+    echo "   当前版本：v${CLIENT_VER:-未知}"
+    echo "   最新版本：$LATEST_TAG"
+    read -r -p "❓ 是否升级 Ollama？[Y/n] " CONFIRM_OLLAMA < /dev/tty
+    CONFIRM_OLLAMA="${CONFIRM_OLLAMA:-Y}"
 
-# 如果已有完整文件就跳过下载
-if [ -f "$FILENAME" ]; then
-    echo "🔍 检测到本地已有 $FILENAME，验证完整性..."
+    if [[ "$CONFIRM_OLLAMA" =~ ^[Yy]$ ]]; then
+        # 如果已有完整文件就跳过下载
+        if [ -f "$FILENAME" ]; then
+            echo "🔍 检测到本地已有 $FILENAME，验证完整性..."
+            if zstd -t "$FILENAME" 2>/dev/null; then
+                echo "✅ 本地压缩包完整，跳过下载"
+            else
+                echo "❌ 本地文件损坏，重新下载"
+                rm -f "$FILENAME"
+            fi
+        fi
 
-    if zstd -t "$FILENAME" 2>/dev/null; then
-        echo "✅ 本地压缩包完整，跳过下载"
+        # 如果文件不存在才开始下载
+        if [ ! -f "$FILENAME" ]; then
+            echo "⬇️ 正在下载版本 $LATEST_TAG ..."
+            DOWNLOAD_OK=false
+
+            if command -v aria2c >/dev/null 2>&1; then
+                echo "🚀 使用 aria2c 多线程下载..."
+                if aria2c -x 16 -s 16 -k 1M -o "$FILENAME" "$URL"; then
+                    DOWNLOAD_OK=true
+                else
+                    echo "⚠️ aria2c 下载失败，尝试使用 curl 重新下载..."
+                    rm -f "$FILENAME"
+                fi
+            fi
+
+            if [ "$DOWNLOAD_OK" = false ]; then
+                echo "⬇️ 使用 curl 下载..."
+                if curl -L -o "$FILENAME" "$URL"; then
+                    DOWNLOAD_OK=true
+                else
+                    rm -f "$FILENAME"
+                fi
+            fi
+
+            if [ "$DOWNLOAD_OK" = false ]; then
+                echo "❌ 下载失败，请检查网络连接"
+                echo "   建议使用 GitHub 代理重新运行脚本"
+                exit 1
+            fi
+        fi
+
+        # 备份旧版本
+        BACKUP_NAME="ollama_bk_$(date +%Y%m%d_%H%M%S)"
+        mv ollama "$BACKUP_NAME"
+        echo "📦 已备份原版 Ollama 为：$BACKUP_NAME"
+
+        # 解压部署新版本
+        echo "📦 解压到 ollama/ ..."
+        mkdir -p ollama
+        tar --use-compress-program=unzstd -xf "$FILENAME" -C ollama
+
+        # 打印新版本确认
+        if [ -x "./ollama/bin/ollama" ]; then
+            VERSION_RAW=$(./ollama/bin/ollama --version 2>&1)
+            NEW_VER=$(echo "$VERSION_RAW" | grep -i "client version" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+            if [ -n "$NEW_VER" ]; then
+                echo "✅ Ollama 已升级至：v$NEW_VER"
+            else
+                echo "⚠️ 无法提取版本号，原始输出如下："
+                echo "$VERSION_RAW"
+            fi
+        fi
+        OLLAMA_UPGRADED=true
     else
-        echo "❌ 本地文件损坏，重新下载"
-        rm -f "$FILENAME"
+        echo "⏭️ 跳过 Ollama 升级"
+        OLLAMA_UPGRADED=false
     fi
 fi
 
-# 如果文件不存在才开始下载
-if [ ! -f "$FILENAME" ]; then
-    echo "⬇️ 正在下载版本 $LATEST_TAG ..."
-    DOWNLOAD_OK=false
-
-    if command -v aria2c >/dev/null 2>&1; then
-        echo "🚀 使用 aria2c 多线程下载..."
-        if aria2c -x 16 -s 16 -k 1M -o "$FILENAME" "$URL"; then
-            DOWNLOAD_OK=true
-        else
-            echo "⚠️ aria2c 下载失败，尝试使用 curl 重新下载..."
-            rm -f "$FILENAME"
-        fi
-    fi
-
-    if [ "$DOWNLOAD_OK" = false ]; then
-        echo "⬇️ 使用 curl 下载..."
-        if curl -L -o "$FILENAME" "$URL"; then
-            DOWNLOAD_OK=true
-        else
-            rm -f "$FILENAME"
-        fi
-    fi
-
-    if [ "$DOWNLOAD_OK" = false ]; then
-        echo "❌ 下载失败，请检查网络连接"
-        echo "   建议使用 GitHub 代理重新运行脚本"
-        exit 1
-    fi
-fi
-
-
-# 4. 备份旧版本
-BACKUP_NAME="ollama_bk_$(date +%Y%m%d_%H%M%S)"
-mv ollama "$BACKUP_NAME"
-echo "📦 已备份原版 Ollama 为：$BACKUP_NAME"
-
-# 5. 解压部署新版本
-echo "📦 解压到 ollama/ ..."
-mkdir -p ollama
-tar --use-compress-program=unzstd -xf "$FILENAME" -C ollama
-
-# 6. 升级 pip 和 open-webui
+# ========== pip 升级 ==========
 PIP_DIR="$AI_INSTALLER/python/bin"
 
 # 自动检测 Python 可执行文件路径
@@ -178,7 +201,6 @@ for pybin in /var/apps/ai_installer/target/python/bin/python3.*; do
 done
 
 if [ -z "$PYTHON_EXEC" ]; then
-    # 回退：在 AI_INSTALLER 目录下查找
     PYTHON_EXEC=$(find "$AI_INSTALLER/python/bin" -maxdepth 1 -name 'python3.*' -executable 2>/dev/null | head -n 1)
 fi
 
@@ -187,46 +209,58 @@ if [ -z "$PYTHON_EXEC" ]; then
 else
     echo "🐍 检测到 Python：$PYTHON_EXEC"
 
-    echo "⬆️ 正在升级 pip..."
-    "$PYTHON_EXEC" -m pip install --upgrade pip || {
-        echo "❌ pip 升级失败，可能是网络问题或 GitHub 被墙"
-        echo "   请尝试设置代理后重新运行："
-        echo "   export https_proxy=http://127.0.0.1:7890"
-        echo "   export http_proxy=http://127.0.0.1:7890"
-        exit 1
-    }
+    # 获取当前 pip 版本
+    CURRENT_PIP_VER=$("$PYTHON_EXEC" -m pip --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n 1)
+    LATEST_PIP_VER=$(curl -sL https://pypi.org/pypi/pip/json 2>/dev/null | grep -oP '"version"\s*:\s*"\K[^"]+' | head -n 1)
 
-    echo "⬆️ 正在升级 open-webui..."
-    if [ -x "$PIP_DIR/pip3" ]; then
-        cd "$PIP_DIR"
-        ./pip3 install --upgrade open_webui || {
-            echo "❌ open-webui 升级失败"
-            echo "🔎 常见原因：网络不通 / pip太旧 / 无法连接 PyPI"
-            echo "✔️ 可尝试设置代理或手动升级："
+    echo ""
+    echo "📋 pip 版本信息："
+    echo "   当前版本：${CURRENT_PIP_VER:-未知}"
+    echo "   最新版本：${LATEST_PIP_VER:-获取失败}"
+    read -r -p "❓ 是否升级 pip？[Y/n] " CONFIRM_PIP < /dev/tty
+    CONFIRM_PIP="${CONFIRM_PIP:-Y}"
+
+    if [[ "$CONFIRM_PIP" =~ ^[Yy]$ ]]; then
+        echo "⬆️ 正在升级 pip..."
+        "$PYTHON_EXEC" -m pip install --upgrade pip || {
+            echo "❌ pip 升级失败，可能是网络问题"
+            echo "   请尝试设置代理后重新运行："
             echo "   export https_proxy=http://127.0.0.1:7890"
             echo "   export http_proxy=http://127.0.0.1:7890"
-            exit 1
         }
+    else
+        echo "⏭️ 跳过 pip 升级"
+    fi
+
+    # ========== open-webui 升级 ==========
+    if [ -x "$PIP_DIR/pip3" ]; then
+        CURRENT_WEBUI_VER=$("$PIP_DIR/pip3" show open_webui 2>/dev/null | grep -i "^Version:" | awk '{print $2}')
+        LATEST_WEBUI_VER=$(curl -sL https://pypi.org/pypi/open_webui/json 2>/dev/null | grep -oP '"version"\s*:\s*"\K[^"]+' | head -n 1)
+
+        echo ""
+        echo "📋 open-webui 版本信息："
+        echo "   当前版本：${CURRENT_WEBUI_VER:-未知}"
+        echo "   最新版本：${LATEST_WEBUI_VER:-获取失败}"
+        read -r -p "❓ 是否升级 open-webui？[Y/n] " CONFIRM_WEBUI < /dev/tty
+        CONFIRM_WEBUI="${CONFIRM_WEBUI:-Y}"
+
+        if [[ "$CONFIRM_WEBUI" =~ ^[Yy]$ ]]; then
+            echo "⬆️ 正在升级 open-webui..."
+            cd "$PIP_DIR"
+            ./pip3 install --upgrade open_webui || {
+                echo "❌ open-webui 升级失败"
+                echo "🔎 常见原因：网络不通 / pip太旧 / 无法连接 PyPI"
+                echo "✔️ 可尝试设置代理或手动升级："
+                echo "   export https_proxy=http://127.0.0.1:7890"
+                echo "   export http_proxy=http://127.0.0.1:7890"
+            }
+        else
+            echo "⏭️ 跳过 open-webui 升级"
+        fi
     else
         echo "⚠️ 未找到 pip3，跳过 open-webui 升级"
     fi
 fi
 
-# 7. 打印新版本确认
-cd "$AI_INSTALLER"
-
-if [ -x "./ollama/bin/ollama" ]; then
-    VERSION_RAW=$(./ollama/bin/ollama --version 2>&1)
-    CLIENT_VER=$(echo "$VERSION_RAW" | grep -i "client version" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-
-    if [ -n "$CLIENT_VER" ]; then
-        echo "✅ 新 Ollama 版本为：v$CLIENT_VER（客户端）"
-    else
-        echo "⚠️ 无法提取版本号，原始输出如下："
-        echo "$VERSION_RAW"
-    fi
-else
-    echo "❌ 未找到 ollama 可执行文件"
-fi
-
-echo "🎉 升级完成！Ollama 与 open-webui 均为最新版本。"
+echo ""
+echo "🎉 操作完成！"
