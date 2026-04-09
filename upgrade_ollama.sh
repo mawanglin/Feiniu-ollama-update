@@ -3,7 +3,7 @@
 set -e
 set -o pipefail
 
-echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.3.2"
+echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.3.3"
 
 # 1. 查找 Ollama 安装路径
 echo "🔍 查找 Ollama 安装路径..."
@@ -189,26 +189,37 @@ else
 fi
 
 # ========== pip 升级 ==========
-PIP_DIR="$AI_INSTALLER/python/bin"
+# pip3 默认与 Python 同目录
+PIP_DIR=""
 
 # 自动检测 Python 可执行文件路径
 PYTHON_EXEC=""
-if ls /var/apps/ai_installer/target/python/bin/python3.* 1>/dev/null 2>&1; then
-    for pybin in /var/apps/ai_installer/target/python/bin/python3.*; do
-        if [ -x "$pybin" ] && [[ "$pybin" =~ python3\.[0-9]+$ ]]; then
-            PYTHON_EXEC="$pybin"
-            break
-        fi
+PYTHON_SEARCH_PATHS=(
+    "/var/apps/ai_installer/target/python/bin"
+    "$AI_INSTALLER/python/bin"
+)
+# 动态搜索 /volX/@appcenter/python3*/bin
+for vol in "${VOL_PREFIXES[@]}"; do
+    for pydir in "$vol"/@appcenter/python3*/bin; do
+        [ -d "$pydir" ] && PYTHON_SEARCH_PATHS+=("$pydir")
     done
-fi
+done
 
-if [ -z "$PYTHON_EXEC" ] && [ -d "$AI_INSTALLER/python/bin" ]; then
-    PYTHON_EXEC=$(find "$AI_INSTALLER/python/bin" -maxdepth 1 -name 'python3.*' -executable 2>/dev/null | head -n 1 || true)
-fi
+for search_dir in "${PYTHON_SEARCH_PATHS[@]}"; do
+    if ls "$search_dir"/python3.* 1>/dev/null 2>&1; then
+        for pybin in "$search_dir"/python3.*; do
+            if [ -x "$pybin" ] && [[ "$pybin" =~ python3\.[0-9]+$ ]]; then
+                PYTHON_EXEC="$pybin"
+                break 2
+            fi
+        done
+    fi
+done
 
 if [ -z "$PYTHON_EXEC" ]; then
     echo "⚠️ 未找到 Python 可执行文件，跳过 pip 和 open-webui 升级"
 else
+    PIP_DIR="$(dirname "$PYTHON_EXEC")"
     echo "🐍 检测到 Python：$PYTHON_EXEC"
 
     # 获取当前 pip 版本
