@@ -126,12 +126,31 @@ fi
 # 如果文件不存在才开始下载
 if [ ! -f "$FILENAME" ]; then
     echo "⬇️ 正在下载版本 $LATEST_TAG ..."
+    DOWNLOAD_OK=false
+
     if command -v aria2c >/dev/null 2>&1; then
         echo "🚀 使用 aria2c 多线程下载..."
-        aria2c -x 16 -s 16 -k 1M -o "$FILENAME" "$URL"
-    else
-        echo "⬇️ 使用 curl 单线程下载..."
-        curl -L -o "$FILENAME" "$URL"
+        if aria2c -x 16 -s 16 -k 1M -o "$FILENAME" "$URL"; then
+            DOWNLOAD_OK=true
+        else
+            echo "⚠️ aria2c 下载失败，尝试使用 curl 重新下载..."
+            rm -f "$FILENAME"
+        fi
+    fi
+
+    if [ "$DOWNLOAD_OK" = false ]; then
+        echo "⬇️ 使用 curl 下载..."
+        if curl -L -o "$FILENAME" "$URL"; then
+            DOWNLOAD_OK=true
+        else
+            rm -f "$FILENAME"
+        fi
+    fi
+
+    if [ "$DOWNLOAD_OK" = false ]; then
+        echo "❌ 下载失败，请检查网络连接"
+        echo "   建议使用 GitHub 代理重新运行脚本"
+        exit 1
     fi
 fi
 
