@@ -34,6 +34,7 @@ curl -sL https://raw.githubusercontent.com/wzqvip/Feiniu-ollama-update/main/upgr
 - 自动下载并部署最新 Ollama 版本
 - 自动升级 `pip` 和 `open-webui`
 - 自动检查版本一致性，若已是最新则跳过更新
+- 支持可选的 GitHub 代理加速下载（适合国内网络环境）
 
 ---
 
@@ -54,6 +55,25 @@ taco@MS-FnOS:~$ curl -sL https://raw.githubusercontent.com/wzqvip/Feiniu-ollama-
 ✅ 新 Ollama 版本为：v0.9.5（客户端）
 🎉 升级完成！Ollama 与 open-webui 均为最新版本。
 ```
+
+---
+
+## 🌏 GitHub 代理加速（可选）
+
+脚本运行时会询问是否使用 GitHub 代理加速下载，适合国内直连 GitHub 较慢的用户。
+
+- 直接回车：不使用代理，从 GitHub 原始地址下载
+- 输入代理地址：通过代理服务器加速下载
+
+常用代理地址示例：
+
+| 代理地址 | 说明 |
+|---------|------|
+| `https://ghgo.xyz/` | ghgo 加速 |
+| `https://gh-proxy.com/` | gh-proxy 加速 |
+| `https://github.moeyy.xyz/` | moeyy 加速 |
+
+> 注意：代理服务为第三方提供，可用性可能随时变化，请自行选择可信的代理。
 
 ---
 

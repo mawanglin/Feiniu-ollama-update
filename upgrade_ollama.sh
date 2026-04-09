@@ -3,7 +3,7 @@
 set -e
 set -o pipefail
 
-echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.1.1"
+echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.2.0"
 
 # 1. 查找 Ollama 安装路径
 echo "🔍 查找 Ollama 安装路径..."
@@ -79,7 +79,27 @@ fi
 
 echo "📦 最新版本号：$LATEST_TAG"
 
-URL="https://github.com/ollama/ollama/releases/download/$LATEST_TAG/$FILENAME"
+GITHUB_URL="https://github.com/ollama/ollama/releases/download/$LATEST_TAG/$FILENAME"
+
+# 询问是否使用 GitHub 代理加速下载
+echo ""
+echo "🌏 是否使用 GitHub 代理加速下载？"
+echo "   常用代理示例："
+echo "     - https://ghgo.xyz/"
+echo "     - https://gh-proxy.com/"
+echo "     - https://github.moeyy.xyz/"
+echo ""
+read -r -p "请输入代理地址（直接回车跳过，不使用代理）： " PROXY_URL < /dev/tty
+
+if [ -n "$PROXY_URL" ]; then
+    # 去掉末尾的斜杠，统一格式
+    PROXY_URL="${PROXY_URL%/}"
+    URL="${PROXY_URL}/${GITHUB_URL}"
+    echo "✅ 将通过代理下载：$URL"
+else
+    URL="$GITHUB_URL"
+    echo "ℹ️ 不使用代理，直接从 GitHub 下载"
+fi
 
 # 如果版本一致，退出升级
 if [ "$CLIENT_VER" = "${LATEST_TAG#v}" ]; then
