@@ -217,19 +217,24 @@ else
     echo "📋 pip 版本信息："
     echo "   当前版本：${CURRENT_PIP_VER:-未知}"
     echo "   最新版本：${LATEST_PIP_VER:-获取失败}"
-    read -r -p "❓ 是否升级 pip？[Y/n] " CONFIRM_PIP < /dev/tty
-    CONFIRM_PIP="${CONFIRM_PIP:-Y}"
 
-    if [[ "$CONFIRM_PIP" =~ ^[Yy]$ ]]; then
-        echo "⬆️ 正在升级 pip..."
-        "$PYTHON_EXEC" -m pip install --upgrade pip || {
-            echo "❌ pip 升级失败，可能是网络问题"
-            echo "   请尝试设置代理后重新运行："
-            echo "   export https_proxy=http://127.0.0.1:7890"
-            echo "   export http_proxy=http://127.0.0.1:7890"
-        }
+    if [ -n "$CURRENT_PIP_VER" ] && [ "$CURRENT_PIP_VER" = "$LATEST_PIP_VER" ]; then
+        echo "✅ pip 当前已是最新版本，无需升级。"
     else
-        echo "⏭️ 跳过 pip 升级"
+        read -r -p "❓ 是否升级 pip？[Y/n] " CONFIRM_PIP < /dev/tty
+        CONFIRM_PIP="${CONFIRM_PIP:-Y}"
+
+        if [[ "$CONFIRM_PIP" =~ ^[Yy]$ ]]; then
+            echo "⬆️ 正在升级 pip..."
+            "$PYTHON_EXEC" -m pip install --upgrade pip || {
+                echo "❌ pip 升级失败，可能是网络问题"
+                echo "   请尝试设置代理后重新运行："
+                echo "   export https_proxy=http://127.0.0.1:7890"
+                echo "   export http_proxy=http://127.0.0.1:7890"
+            }
+        else
+            echo "⏭️ 跳过 pip 升级"
+        fi
     fi
 
     # ========== open-webui 升级 ==========
@@ -241,21 +246,26 @@ else
         echo "📋 open-webui 版本信息："
         echo "   当前版本：${CURRENT_WEBUI_VER:-未知}"
         echo "   最新版本：${LATEST_WEBUI_VER:-获取失败}"
-        read -r -p "❓ 是否升级 open-webui？[Y/n] " CONFIRM_WEBUI < /dev/tty
-        CONFIRM_WEBUI="${CONFIRM_WEBUI:-Y}"
 
-        if [[ "$CONFIRM_WEBUI" =~ ^[Yy]$ ]]; then
-            echo "⬆️ 正在升级 open-webui..."
-            cd "$PIP_DIR"
-            ./pip3 install --upgrade open_webui || {
-                echo "❌ open-webui 升级失败"
-                echo "🔎 常见原因：网络不通 / pip太旧 / 无法连接 PyPI"
-                echo "✔️ 可尝试设置代理或手动升级："
-                echo "   export https_proxy=http://127.0.0.1:7890"
-                echo "   export http_proxy=http://127.0.0.1:7890"
-            }
+        if [ -n "$CURRENT_WEBUI_VER" ] && [ "$CURRENT_WEBUI_VER" = "$LATEST_WEBUI_VER" ]; then
+            echo "✅ open-webui 当前已是最新版本，无需升级。"
         else
-            echo "⏭️ 跳过 open-webui 升级"
+            read -r -p "❓ 是否升级 open-webui？[Y/n] " CONFIRM_WEBUI < /dev/tty
+            CONFIRM_WEBUI="${CONFIRM_WEBUI:-Y}"
+
+            if [[ "$CONFIRM_WEBUI" =~ ^[Yy]$ ]]; then
+                echo "⬆️ 正在升级 open-webui..."
+                cd "$PIP_DIR"
+                ./pip3 install --upgrade open_webui || {
+                    echo "❌ open-webui 升级失败"
+                    echo "🔎 常见原因：网络不通 / pip太旧 / 无法连接 PyPI"
+                    echo "✔️ 可尝试设置代理或手动升级："
+                    echo "   export https_proxy=http://127.0.0.1:7890"
+                    echo "   export http_proxy=http://127.0.0.1:7890"
+                }
+            else
+                echo "⏭️ 跳过 open-webui 升级"
+            fi
         fi
     else
         echo "⚠️ 未找到 pip3，跳过 open-webui 升级"
