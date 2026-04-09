@@ -3,7 +3,7 @@
 set -e
 set -o pipefail
 
-echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.3.3"
+echo "🔄 Ollama 升级脚本 for FnOS, 脚本v2.4.0"
 
 # 1. 查找 Ollama 安装路径
 echo "🔍 查找 Ollama 安装路径..."
@@ -14,7 +14,6 @@ AI_INSTALLER=""
 for vol in "${VOL_PREFIXES[@]}"; do
     if [ -d "$vol/@appcenter/ai_installer/ollama" ]; then
         AI_INSTALLER="$vol/@appcenter/ai_installer"
-        echo "✅ 找到安装路径：$AI_INSTALLER"
         break
     fi
 done
@@ -35,14 +34,28 @@ if [ -z "$AI_INSTALLER" ]; then
                 else
                     echo "⚠️ 还原后未找到 ollama 可执行文件，可能备份不完整"
                 fi
-                exit 0  # ✅ 成功还原后立即退出整个脚本
+                exit 0
             fi
         fi
     done
+fi
 
-    echo "❌ 未找到 Ollama 安装路径，也没有检测到可恢复的中断备份"
+# 让用户确认或手动指定 Ollama 安装路径
+if [ -n "$AI_INSTALLER" ]; then
+    echo "✅ 检测到 Ollama 安装路径：$AI_INSTALLER"
+else
+    echo "⚠️ 未自动检测到 Ollama 安装路径"
+fi
+read -r -p "请确认或输入 Ollama 安装路径（直接回车使用默认）： " USER_AI_INSTALLER < /dev/tty
+if [ -n "$USER_AI_INSTALLER" ]; then
+    AI_INSTALLER="$USER_AI_INSTALLER"
+fi
+
+if [ -z "$AI_INSTALLER" ] || [ ! -d "$AI_INSTALLER" ]; then
+    echo "❌ Ollama 安装路径无效：${AI_INSTALLER:-未设置}"
     exit 1
 fi
+echo "📂 使用 Ollama 安装路径：$AI_INSTALLER"
 
 cd "$AI_INSTALLER"
 
@@ -216,11 +229,26 @@ for search_dir in "${PYTHON_SEARCH_PATHS[@]}"; do
     fi
 done
 
-if [ -z "$PYTHON_EXEC" ]; then
-    echo "⚠️ 未找到 Python 可执行文件，跳过 pip 和 open-webui 升级"
+if [ -n "$PYTHON_EXEC" ]; then
+    echo "✅ 检测到 Python：$PYTHON_EXEC"
+else
+    echo "⚠️ 未自动检测到 Python 可执行文件"
+fi
+read -r -p "请确认或输入 Python 路径（直接回车使用默认，输入 skip 跳过）： " USER_PYTHON < /dev/tty
+if [ "$USER_PYTHON" = "skip" ]; then
+    PYTHON_EXEC=""
+elif [ -n "$USER_PYTHON" ]; then
+    PYTHON_EXEC="$USER_PYTHON"
+fi
+
+if [ -z "$PYTHON_EXEC" ] || [ ! -x "$PYTHON_EXEC" ]; then
+    if [ -n "$PYTHON_EXEC" ]; then
+        echo "❌ Python 路径无效：$PYTHON_EXEC"
+    fi
+    echo "⏭️ 跳过 pip 和 open-webui 升级"
 else
     PIP_DIR="$(dirname "$PYTHON_EXEC")"
-    echo "🐍 检测到 Python：$PYTHON_EXEC"
+    echo "🐍 使用 Python：$PYTHON_EXEC"
 
     # 获取当前 pip 版本
     CURRENT_PIP_VER=$("$PYTHON_EXEC" -m pip --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n 1 || true)
@@ -251,8 +279,23 @@ else
     fi
 
     # ========== open-webui 升级 ==========
-    if [ -x "$PIP_DIR/pip3" ]; then
-        CURRENT_WEBUI_VER=$("$PIP_DIR/pip3" show open_webui 2>/dev/null | grep -i "^Version:" | awk '{print $2}' || true)
+    # 检测 pip3 路径，允许用户覆盖
+    PIP3_EXEC="$PIP_DIR/pip3"
+    if [ -x "$PIP3_EXEC" ]; then
+        echo "✅ 检测到 pip3：$PIP3_EXEC"
+    else
+        echo "⚠️ 未在 $PIP_DIR 下找到 pip3"
+        PIP3_EXEC=""
+    fi
+    read -r -p "请确认或输入 pip3 路径（直接回车使用默认，输入 skip 跳过）： " USER_PIP3 < /dev/tty
+    if [ "$USER_PIP3" = "skip" ]; then
+        PIP3_EXEC=""
+    elif [ -n "$USER_PIP3" ]; then
+        PIP3_EXEC="$USER_PIP3"
+    fi
+
+    if [ -n "$PIP3_EXEC" ] && [ -x "$PIP3_EXEC" ]; then
+        CURRENT_WEBUI_VER=$("$PIP3_EXEC" show open_webui 2>/dev/null | grep -i "^Version:" | awk '{print $2}' || true)
         LATEST_WEBUI_VER=$(curl -sL https://pypi.org/pypi/open_webui/json 2>/dev/null | grep -oP '"version"\s*:\s*"\K[^"]+' | head -n 1 || true)
 
         echo ""
@@ -268,8 +311,7 @@ else
 
             if [[ "$CONFIRM_WEBUI" =~ ^[Yy]$ ]]; then
                 echo "⬆️ 正在升级 open-webui..."
-                cd "$PIP_DIR"
-                ./pip3 install --upgrade open_webui || {
+                "$PIP3_EXEC" install --upgrade open_webui || {
                     echo "❌ open-webui 升级失败"
                     echo "🔎 常见原因：网络不通 / pip太旧 / 无法连接 PyPI"
                     echo "✔️ 可尝试设置代理或手动升级："
@@ -281,7 +323,7 @@ else
             fi
         fi
     else
-        echo "⚠️ 未找到 pip3，跳过 open-webui 升级"
+        echo "⏭️ 跳过 open-webui 升级"
     fi
 fi
 
