@@ -167,27 +167,50 @@ tar --use-compress-program=unzstd -xf "$FILENAME" -C ollama
 
 # 6. 升级 pip 和 open-webui
 PIP_DIR="$AI_INSTALLER/python/bin"
-PYTHON_EXEC="/var/apps/ai_installer/target/python/bin/python3.12"
 
-echo "⬆️ 正在升级 pip..."
-"$PYTHON_EXEC" -m pip install --upgrade pip || {
-    echo "❌ pip 升级失败，可能是网络问题或 GitHub 被墙"
-    echo "   请尝试设置代理后重新运行："
-    echo "   export https_proxy=http://127.0.0.1:7890"
-    echo "   export http_proxy=http://127.0.0.1:7890"
-    exit 1
-}
+# 自动检测 Python 可执行文件路径
+PYTHON_EXEC=""
+for pybin in /var/apps/ai_installer/target/python/bin/python3.*; do
+    if [ -x "$pybin" ] && [[ "$pybin" != *.* ]] 2>/dev/null || [[ "$pybin" =~ python3\.[0-9]+$ ]]; then
+        PYTHON_EXEC="$pybin"
+        break
+    fi
+done
 
-echo "⬆️ 正在升级 open-webui..."
-cd "$PIP_DIR"
-./pip3 install --upgrade open_webui || {
-    echo "❌ open-webui 升级失败"
-    echo "🔎 常见原因：网络不通 / pip太旧 / 无法连接 PyPI"
-    echo "✔️ 可尝试设置代理或手动升级："
-    echo "   export https_proxy=http://127.0.0.1:7890"
-    echo "   export http_proxy=http://127.0.0.1:7890"
-    exit 1
-}
+if [ -z "$PYTHON_EXEC" ]; then
+    # 回退：在 AI_INSTALLER 目录下查找
+    PYTHON_EXEC=$(find "$AI_INSTALLER/python/bin" -maxdepth 1 -name 'python3.*' -executable 2>/dev/null | head -n 1)
+fi
+
+if [ -z "$PYTHON_EXEC" ]; then
+    echo "⚠️ 未找到 Python 可执行文件，跳过 pip 和 open-webui 升级"
+else
+    echo "🐍 检测到 Python：$PYTHON_EXEC"
+
+    echo "⬆️ 正在升级 pip..."
+    "$PYTHON_EXEC" -m pip install --upgrade pip || {
+        echo "❌ pip 升级失败，可能是网络问题或 GitHub 被墙"
+        echo "   请尝试设置代理后重新运行："
+        echo "   export https_proxy=http://127.0.0.1:7890"
+        echo "   export http_proxy=http://127.0.0.1:7890"
+        exit 1
+    }
+
+    echo "⬆️ 正在升级 open-webui..."
+    if [ -x "$PIP_DIR/pip3" ]; then
+        cd "$PIP_DIR"
+        ./pip3 install --upgrade open_webui || {
+            echo "❌ open-webui 升级失败"
+            echo "🔎 常见原因：网络不通 / pip太旧 / 无法连接 PyPI"
+            echo "✔️ 可尝试设置代理或手动升级："
+            echo "   export https_proxy=http://127.0.0.1:7890"
+            echo "   export http_proxy=http://127.0.0.1:7890"
+            exit 1
+        }
+    else
+        echo "⚠️ 未找到 pip3，跳过 open-webui 升级"
+    fi
+fi
 
 # 7. 打印新版本确认
 cd "$AI_INSTALLER"
