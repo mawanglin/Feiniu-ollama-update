@@ -64,7 +64,7 @@ else
 fi
 
 # 3. 下载最新版本
-FILENAME="ollama-linux-amd64.tgz"
+FILENAME="ollama-linux-amd64.tar.zst"
 echo "🌐 获取 Ollama 最新版本号..."
 
 # 使用 GitHub API 获取最新版本号
@@ -111,7 +111,7 @@ fi
 if [ -f "$FILENAME" ]; then
     echo "🔍 检测到本地已有 $FILENAME，验证完整性..."
 
-    if gzip -t "$FILENAME" 2>/dev/null; then
+    if zstd -t "$FILENAME" 2>/dev/null; then
         echo "✅ 本地压缩包完整，跳过下载"
     else
         echo "❌ 本地文件损坏，重新下载"
@@ -140,7 +140,7 @@ echo "📦 已备份原版 Ollama 为：$BACKUP_NAME"
 # 5. 解压部署新版本
 echo "📦 解压到 ollama/ ..."
 mkdir -p ollama
-tar -xzf "$FILENAME" -C ollama
+tar --use-compress-program=unzstd -xf "$FILENAME" -C ollama
 
 # 6. 升级 pip 和 open-webui
 PIP_DIR="$AI_INSTALLER/python/bin"
