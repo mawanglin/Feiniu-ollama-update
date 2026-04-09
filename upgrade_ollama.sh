@@ -63,27 +63,9 @@ else
     echo "❌ 未找到 ollama 可执行文件"
 fi
 
-# 3. 下载最新版本
-FILENAME="ollama-linux-amd64.tar.zst"
-echo "🌐 获取 Ollama 最新版本号..."
-
-# 使用 GitHub API 获取最新版本号
-#LATEST_TAG=$(curl -s https://api.github.com/repos/ollama/ollama/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
-# 国内网络原因，或者代理，会遇到速率限制问题。 用一个小trick拉网页获取。
-LATEST_TAG=$(curl -s https://github.com/ollama/ollama/releases | grep -oP '/ollama/ollama/releases/tag/\K[^"]+' | head -n 1)
-
-if [ -z "$LATEST_TAG" ]; then
-    echo "❌ 无法从 GitHub 获取 Ollama 最新版本号，请检查网络连接或代理设置"
-    exit 1
-fi
-
-echo "📦 最新版本号：$LATEST_TAG"
-
-GITHUB_URL="https://github.com/ollama/ollama/releases/download/$LATEST_TAG/$FILENAME"
-
-# 询问是否使用 GitHub 代理加速下载
+# 3. 询问是否使用 GitHub 代理
 echo ""
-echo "🌏 是否使用 GitHub 代理加速下载？"
+echo "🌏 是否使用 GitHub 代理加速？（同时用于版本检测和下载）"
 echo "   常用代理示例："
 echo "     - https://ghgo.xyz/"
 echo "     - https://gh-proxy.com/"
@@ -92,13 +74,35 @@ echo ""
 read -r -p "请输入代理地址（直接回车跳过，不使用代理）： " PROXY_URL < /dev/tty
 
 if [ -n "$PROXY_URL" ]; then
-    # 去掉末尾的斜杠，统一格式
     PROXY_URL="${PROXY_URL%/}"
+    echo "✅ 使用代理：$PROXY_URL"
+else
+    echo "ℹ️ 不使用代理，直接连接 GitHub"
+fi
+
+# 4. 获取最新版本号
+FILENAME="ollama-linux-amd64.tar.zst"
+RELEASES_URL="https://github.com/ollama/ollama/releases"
+if [ -n "$PROXY_URL" ]; then
+    RELEASES_URL="${PROXY_URL}/${RELEASES_URL}"
+fi
+
+echo "🌐 获取 Ollama 最新版本号..."
+LATEST_TAG=$(curl -sL "$RELEASES_URL" | grep -oP '/ollama/ollama/releases/tag/\K[^"]+' | head -n 1)
+
+if [ -z "$LATEST_TAG" ]; then
+    echo "❌ 无法从 GitHub 获取 Ollama 最新版本号，请检查网络连接或代理设置"
+    exit 1
+fi
+
+echo "📦 最新版本号：$LATEST_TAG"
+
+# 构造下载地址
+GITHUB_URL="https://github.com/ollama/ollama/releases/download/$LATEST_TAG/$FILENAME"
+if [ -n "$PROXY_URL" ]; then
     URL="${PROXY_URL}/${GITHUB_URL}"
-    echo "✅ 将通过代理下载：$URL"
 else
     URL="$GITHUB_URL"
-    echo "ℹ️ 不使用代理，直接从 GitHub 下载"
 fi
 
 # 如果版本一致，退出升级
