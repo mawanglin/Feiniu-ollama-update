@@ -193,15 +193,17 @@ PIP_DIR="$AI_INSTALLER/python/bin"
 
 # 自动检测 Python 可执行文件路径
 PYTHON_EXEC=""
-for pybin in /var/apps/ai_installer/target/python/bin/python3.*; do
-    if [ -x "$pybin" ] && [[ "$pybin" != *.* ]] 2>/dev/null || [[ "$pybin" =~ python3\.[0-9]+$ ]]; then
-        PYTHON_EXEC="$pybin"
-        break
-    fi
-done
+if ls /var/apps/ai_installer/target/python/bin/python3.* 1>/dev/null 2>&1; then
+    for pybin in /var/apps/ai_installer/target/python/bin/python3.*; do
+        if [ -x "$pybin" ] && [[ "$pybin" =~ python3\.[0-9]+$ ]]; then
+            PYTHON_EXEC="$pybin"
+            break
+        fi
+    done
+fi
 
-if [ -z "$PYTHON_EXEC" ]; then
-    PYTHON_EXEC=$(find "$AI_INSTALLER/python/bin" -maxdepth 1 -name 'python3.*' -executable 2>/dev/null | head -n 1)
+if [ -z "$PYTHON_EXEC" ] && [ -d "$AI_INSTALLER/python/bin" ]; then
+    PYTHON_EXEC=$(find "$AI_INSTALLER/python/bin" -maxdepth 1 -name 'python3.*' -executable 2>/dev/null | head -n 1 || true)
 fi
 
 if [ -z "$PYTHON_EXEC" ]; then
@@ -210,8 +212,8 @@ else
     echo "🐍 检测到 Python：$PYTHON_EXEC"
 
     # 获取当前 pip 版本
-    CURRENT_PIP_VER=$("$PYTHON_EXEC" -m pip --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n 1)
-    LATEST_PIP_VER=$(curl -sL https://pypi.org/pypi/pip/json 2>/dev/null | grep -oP '"version"\s*:\s*"\K[^"]+' | head -n 1)
+    CURRENT_PIP_VER=$("$PYTHON_EXEC" -m pip --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n 1 || true)
+    LATEST_PIP_VER=$(curl -sL https://pypi.org/pypi/pip/json 2>/dev/null | grep -oP '"version"\s*:\s*"\K[^"]+' | head -n 1 || true)
 
     echo ""
     echo "📋 pip 版本信息："
@@ -239,8 +241,8 @@ else
 
     # ========== open-webui 升级 ==========
     if [ -x "$PIP_DIR/pip3" ]; then
-        CURRENT_WEBUI_VER=$("$PIP_DIR/pip3" show open_webui 2>/dev/null | grep -i "^Version:" | awk '{print $2}')
-        LATEST_WEBUI_VER=$(curl -sL https://pypi.org/pypi/open_webui/json 2>/dev/null | grep -oP '"version"\s*:\s*"\K[^"]+' | head -n 1)
+        CURRENT_WEBUI_VER=$("$PIP_DIR/pip3" show open_webui 2>/dev/null | grep -i "^Version:" | awk '{print $2}' || true)
+        LATEST_WEBUI_VER=$(curl -sL https://pypi.org/pypi/open_webui/json 2>/dev/null | grep -oP '"version"\s*:\s*"\K[^"]+' | head -n 1 || true)
 
         echo ""
         echo "📋 open-webui 版本信息："
